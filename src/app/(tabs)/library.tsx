@@ -1,5 +1,8 @@
+import { useTheme } from '@/context/ThemeContext';
+import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
-import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const API_URL = 'http://192.168.1.10:8000';
+const API_URL = 'http://192.168.100.68:8000';
 
 type QuizQuestion = {
   question: string;
@@ -21,13 +24,31 @@ type QuizQuestion = {
   explanation: string;
 };
 
+type StudyMaterial = {
+  id: string;
+  user_id: string;
+  title: string;
+  file_name: string;
+  summary: string;
+  key_concepts: string[];
+  quiz: {
+    questions: QuizQuestion[];
+  };
+  created_at: string;
+};
+
 export default function LibraryScreen() {
+  const router = useRouter();
+  const { theme } = useTheme();
   const [selectedFile, setSelectedFile] =
     useState<DocumentPicker.DocumentPickerAsset | null>(null);
 
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [studyResult, setStudyResult] = useState<any>(null);
+
+  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
+  const [loadingMaterials, setLoadingMaterials] = useState(true);
 
   // =========================
   // Quiz state
@@ -47,6 +68,51 @@ export default function LibraryScreen() {
   // =========================
   // Pick PDF
   // =========================
+
+  const loadMaterials = async () => {
+    try {
+      setLoadingMaterials(true);
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
+
+      if (!user) {
+        setMaterials([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('study_materials')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      setMaterials(data ?? []);
+    } catch (error) {
+      console.error('Load materials error:', error);
+
+      Alert.alert(
+        'Could not load library',
+        'We could not load your saved study materials.'
+      );
+    } finally {
+      setLoadingMaterials(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMaterials();
+  }, []);
 
   const handlePickDocument = async () => {
     try {
@@ -126,6 +192,33 @@ export default function LibraryScreen() {
 
       setStudyResult(data);
 
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        throw new Error('You must be signed in to save study material.');
+      }
+
+      const { error: saveError } = await supabase
+        .from('study_materials')
+        .insert({
+          user_id: user.id,
+          title: data.filename,
+          file_name: data.filename,
+          summary: data.notes.summary,
+          key_concepts: data.notes.key_concepts,
+          quiz: data.quiz,
+        });
+
+      if (saveError) {
+        console.error('Supabase save error:', saveError);
+        throw saveError;
+      }
+
+      await loadMaterials();
+
       Alert.alert(
         'Study Material Ready!',
         `${data.notes.key_concepts.length} concepts and ${data.quiz.questions.length} quiz questions generated.`
@@ -146,6 +239,21 @@ export default function LibraryScreen() {
   // Quiz functions
   // =========================
 
+  const handleOpenMaterial = (material: any) => {
+    setSelectedFile(null);
+
+    setStudyResult({
+      filename: material.file_name,
+      notes: {
+        summary: material.summary,
+        key_concepts: material.key_concepts,
+      },
+      quiz: material.quiz,
+    });
+
+    resetQuiz();
+  };
+
   const resetQuiz = () => {
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
@@ -162,19 +270,8 @@ export default function LibraryScreen() {
     const question: QuizQuestion =
       studyResult.quiz.questions[currentQuestionIndex];
 
-    const selectedIndex =
-      question.options.indexOf(selectedAnswer);
-
-    const selectedLetter =
-      String.fromCharCode(65 + selectedIndex);
-
-    const correctAnswer = question.correct_answer.trim();
-
-    const correctLetter =
-      correctAnswer.charAt(0).toUpperCase();
-
-    if (selectedLetter === correctLetter) {
-      setScore((previous) => previous + 1);
+    if (selectedAnswer === question.correct_answer) {
+      setScore((previousScore) => previousScore + 1);
     }
 
     setShowAnswer(true);
@@ -212,32 +309,45 @@ export default function LibraryScreen() {
     studyResult?.quiz?.questions?.[currentQuestionIndex] ?? null;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        { backgroundColor: theme.colors.background },
+      ]}
+    >
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Your Library</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>Your Library</Text>
 
-        <Text style={styles.subtitle}>
+        <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
           Turn your study material into interactive learning.
         </Text>
 
         {/* Upload button */}
 
         <Pressable
-          style={styles.uploadCard}
+          style={[
+            styles.uploadCard,
+            { backgroundColor: theme.colors.cardElevated },
+          ]}
           onPress={handlePickDocument}
           disabled={isProcessing}
         >
-          <View style={styles.uploadIcon}>
-            <Text style={styles.uploadIconText}>＋</Text>
+          <View
+            style={[
+              styles.uploadIcon,
+              { backgroundColor: theme.colors.card },
+            ]}
+          >
+            <Text style={[styles.uploadIconText, { color: theme.colors.text }]}>＋</Text>
           </View>
 
           <View style={styles.uploadContent}>
-            <Text style={styles.uploadTitle}>Upload a PDF</Text>
+            <Text style={[styles.uploadTitle, { color: theme.colors.text }]}>Upload a PDF</Text>
 
-            <Text style={styles.uploadDescription}>
+            <Text style={[styles.uploadDescription, { color: theme.colors.textMuted }]}>
               Add your notes, slides, textbook, or study material.
             </Text>
           </View>
@@ -246,27 +356,37 @@ export default function LibraryScreen() {
         {/* Selected PDF */}
 
         {selectedFile && (
-          <View style={styles.selectedFileCard}>
-            <View style={styles.pdfIcon}>
+          <View
+            style={[
+              styles.selectedFileCard,
+              { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.pdfIcon,
+                { backgroundColor: theme.colors.cardElevated },
+              ]}
+            >
               <Text style={styles.pdfIconText}>📄</Text>
             </View>
 
             <View style={styles.materialInfo}>
               <Text
-                style={styles.materialTitle}
+                style={[styles.materialTitle, { color: theme.colors.text }]}
                 numberOfLines={1}
               >
                 {selectedFile.name}
               </Text>
 
-              <Text style={styles.materialMeta}>
+              <Text style={[styles.materialMeta, { color: theme.colors.textMuted }]}>
                 {isProcessing
                   ? 'AI is processing your study material...'
                   : 'PDF selected · Ready for study'}
               </Text>
             </View>
 
-            {isProcessing && <ActivityIndicator />}
+            {isProcessing && <ActivityIndicator color={theme.colors.primary} />}
           </View>
         )}
 
@@ -274,28 +394,33 @@ export default function LibraryScreen() {
 
         {studyResult && !isProcessing && (
           <>
-            <View style={styles.resultCard}>
-              <Text style={styles.resultTitle}>
+            <View
+              style={[
+                styles.resultCard,
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+              ]}
+            >
+              <Text style={[styles.resultTitle, { color: theme.colors.text }]}>
                 Study Material Generated
               </Text>
 
-              <Text style={styles.resultSubtitle}>
+              <Text style={[styles.resultSubtitle, { color: theme.colors.textMuted }]}>
                 {decodeURIComponent(studyResult.filename)}
               </Text>
 
               {/* Summary */}
 
-              <Text style={styles.resultSectionTitle}>
+              <Text style={[styles.resultSectionTitle, { color: theme.colors.text }]}>
                 Summary
               </Text>
 
-              <Text style={styles.resultText}>
+              <Text style={[styles.resultText, { color: theme.colors.textSecondary }]}>
                 {studyResult.notes.summary}
               </Text>
 
               {/* Key Concepts */}
 
-              <Text style={styles.resultSectionTitle}>
+              <Text style={[styles.resultSectionTitle, { color: theme.colors.text }]}>
                 Key Concepts
               </Text>
 
@@ -305,11 +430,11 @@ export default function LibraryScreen() {
                     key={index}
                     style={styles.conceptRow}
                   >
-                    <Text style={styles.conceptBullet}>
+                    <Text style={[styles.conceptBullet, { color: theme.colors.text }]}>
                       •
                     </Text>
 
-                    <Text style={styles.resultText}>
+                    <Text style={[styles.resultText, { color: theme.colors.textSecondary }]}>
                       {concept}
                     </Text>
                   </View>
@@ -322,23 +447,34 @@ export default function LibraryScreen() {
             ========================= */}
 
             {currentQuestion && !quizFinished && (
-              <View style={styles.quizCard}>
+              <View
+                style={[
+                  styles.quizCard,
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                ]}
+              >
                 <View style={styles.quizHeader}>
-                  <Text style={styles.quizTitle}>
+                  <Text style={[styles.quizTitle, { color: theme.colors.text }]}>
                     Quiz
                   </Text>
 
-                  <Text style={styles.quizCounter}>
+                  <Text style={[styles.quizCounter, { color: theme.colors.textMuted }]}>
                     Question {currentQuestionIndex + 1} of{' '}
                     {studyResult.quiz.questions.length}
                   </Text>
                 </View>
 
-                <View style={styles.quizProgressBackground}>
+                <View
+                  style={[
+                    styles.quizProgressBackground,
+                    { backgroundColor: theme.colors.cardElevated },
+                  ]}
+                >
                   <View
                     style={[
                       styles.quizProgressFill,
                       {
+                        backgroundColor: theme.colors.primary,
                         width: `${((currentQuestionIndex + 1) /
                           studyResult.quiz.questions.length) *
                           100
@@ -348,7 +484,7 @@ export default function LibraryScreen() {
                   />
                 </View>
 
-                <Text style={styles.questionText}>
+                <Text style={[styles.questionText, { color: theme.colors.text }]}>
                   {currentQuestion.question}
                 </Text>
 
@@ -357,15 +493,12 @@ export default function LibraryScreen() {
                 <View style={styles.optionsContainer}>
                   {currentQuestion.options.map(
                     (option: string, index: number) => {
-                      const isSelected = selectedAnswer === option;
-
-                      const optionLetter = String.fromCharCode(65 + index);
-
-                      const correctAnswerLetter =
-                        currentQuestion.correct_answer.trim().charAt(0).toUpperCase();
+                      const isSelected =
+                        selectedAnswer === option;
 
                       const isCorrect =
-                        optionLetter === correctAnswerLetter;
+                        option ===
+                        currentQuestion.correct_answer;
 
                       let optionStyle =
                         styles.optionButton;
@@ -392,7 +525,11 @@ export default function LibraryScreen() {
                       return (
                         <Pressable
                           key={index}
-                          style={optionStyle}
+                          style={[
+                            optionStyle,
+                            { backgroundColor: theme.colors.cardElevated, borderColor: theme.colors.border },
+                            isSelected && !showAnswer && { borderColor: theme.colors.primary },
+                          ]}
                           onPress={() => {
                             if (!showAnswer) {
                               setSelectedAnswer(option);
@@ -400,13 +537,13 @@ export default function LibraryScreen() {
                           }}
                           disabled={showAnswer}
                         >
-                          <View style={styles.optionLetter}>
-                            <Text style={styles.optionLetterText}>
+                          <View style={[styles.optionLetter, { backgroundColor: theme.colors.card }]}>
+                            <Text style={[styles.optionLetterText, { color: theme.colors.text }]}>
                               {String.fromCharCode(65 + index)}
                             </Text>
                           </View>
 
-                          <Text style={styles.optionText}>
+                          <Text style={[styles.optionText, { color: theme.colors.text }]}>
                             {option}
                           </Text>
 
@@ -432,20 +569,15 @@ export default function LibraryScreen() {
                 {/* Explanation */}
 
                 {showAnswer && (
-                  <View style={styles.explanationCard}>
-                    <Text style={styles.explanationTitle}>
-                      {String.fromCharCode(
-                        65 + currentQuestion.options.indexOf(selectedAnswer!)
-                      ) ===
+                  <View style={[styles.explanationCard, { backgroundColor: theme.colors.cardElevated }]}>
+                    <Text style={[styles.explanationTitle, { color: theme.colors.text }]}>
+                      {selectedAnswer ===
                         currentQuestion.correct_answer
-                          .trim()
-                          .charAt(0)
-                          .toUpperCase()
                         ? '✓ Correct!'
                         : '✕ Not quite'}
                     </Text>
 
-                    <Text style={styles.explanationText}>
+                    <Text style={[styles.explanationText, { color: theme.colors.textSecondary }]}>
                       {currentQuestion.explanation}
                     </Text>
                   </View>
@@ -457,6 +589,7 @@ export default function LibraryScreen() {
                   <Pressable
                     style={[
                       styles.quizActionButton,
+                      { backgroundColor: theme.colors.primary },
                       !selectedAnswer &&
                       styles.quizActionDisabled,
                     ]}
@@ -469,7 +602,10 @@ export default function LibraryScreen() {
                   </Pressable>
                 ) : (
                   <Pressable
-                    style={styles.quizActionButton}
+                    style={[
+                      styles.quizActionButton,
+                      { backgroundColor: theme.colors.primary },
+                    ]}
                     onPress={handleNextQuestion}
                   >
                     <Text style={styles.quizActionText}>
@@ -488,20 +624,25 @@ export default function LibraryScreen() {
             ========================= */}
 
             {quizFinished && (
-              <View style={styles.quizCard}>
+              <View
+                style={[
+                  styles.quizCard,
+                  { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                ]}
+              >
                 <Text style={styles.finishedIcon}>
                   🎯
                 </Text>
 
-                <Text style={styles.finishedTitle}>
+                <Text style={[styles.finishedTitle, { color: theme.colors.text }]}>
                   Quiz Complete!
                 </Text>
 
-                <Text style={styles.finishedScore}>
+                <Text style={[styles.finishedScore, { color: theme.colors.text }]}>
                   {score} / {studyResult.quiz.questions.length}
                 </Text>
 
-                <Text style={styles.finishedPercentage}>
+                <Text style={[styles.finishedPercentage, { color: theme.colors.textMuted }]}>
                   {Math.round(
                     (score /
                       studyResult.quiz.questions.length) *
@@ -510,7 +651,7 @@ export default function LibraryScreen() {
                   %
                 </Text>
 
-                <Text style={styles.finishedMessage}>
+                <Text style={[styles.finishedMessage, { color: theme.colors.textSecondary }]}>
                   {score ===
                     studyResult.quiz.questions.length
                     ? 'Perfect score! 🔥'
@@ -521,7 +662,10 @@ export default function LibraryScreen() {
                 </Text>
 
                 <Pressable
-                  style={styles.quizActionButton}
+                  style={[
+                    styles.quizActionButton,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
                   onPress={handleRestartQuiz}
                 >
                   <Text style={styles.quizActionText}>
@@ -535,51 +679,77 @@ export default function LibraryScreen() {
 
         {/* Recent materials */}
 
-        <Text style={styles.sectionTitle}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
           Recent Materials
         </Text>
 
-        <View style={styles.materialCard}>
-          <View style={styles.pdfIcon}>
-            <Text style={styles.pdfIconText}>📄</Text>
-          </View>
+        {loadingMaterials ? (
+          <View style={styles.loadingLibrary}>
+            <ActivityIndicator color={theme.colors.primary} />
 
-          <View style={styles.materialInfo}>
-            <Text style={styles.materialTitle}>
-              Operating Systems
-            </Text>
-
-            <Text style={styles.materialMeta}>
-              12 concepts · 24 questions
+            <Text style={[styles.loadingLibraryText, { color: theme.colors.textMuted }]}>
+              Loading your materials...
             </Text>
           </View>
-
-          <Text style={styles.arrow}>›</Text>
-        </View>
-
-        <View style={styles.materialCard}>
-          <View style={styles.pdfIcon}>
-            <Text style={styles.pdfIconText}>📄</Text>
-          </View>
-
-          <View style={styles.materialInfo}>
-            <Text style={styles.materialTitle}>
-              Database Systems
-            </Text>
-
-            <Text style={styles.materialMeta}>
-              18 concepts · 30 questions
+        ) : materials.length === 0 ? (
+          <View style={styles.emptyHint}>
+            <Text style={[styles.emptyHintText, { color: theme.colors.textMuted }]}>
+              Your uploaded materials will appear here.
             </Text>
           </View>
+        ) : (
+          materials.map((material) => (
+            <Pressable
+              key={material.id}
+              style={[
+                styles.materialCard,
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+              ]}
+              onPress={() => {
+                const formattedMaterial = {
+                  title: material.title,
+                  filename: material.file_name || material.title,
+                  summary: material.summary,
+                  key_concepts: material.key_concepts || [],
+                  quiz: material.quiz || { questions: [] },
+                };
 
-          <Text style={styles.arrow}>›</Text>
-        </View>
+                router.push({
+                  pathname: '/material',
+                  params: {
+                    material: JSON.stringify(formattedMaterial),
+                  },
+                });
+              }}
+            >
+              <View
+                style={[
+                  styles.pdfIcon,
+                  { backgroundColor: theme.colors.cardElevated },
+                ]}
+              >
+                <Text style={styles.pdfIconText}>📄</Text>
+              </View>
 
-        <View style={styles.emptyHint}>
-          <Text style={styles.emptyHintText}>
-            Your uploaded materials will appear here.
-          </Text>
-        </View>
+              <View style={styles.materialInfo}>
+                <Text
+                  style={[styles.materialTitle, { color: theme.colors.text }]}
+                  numberOfLines={1}
+                >
+                  {material.title}
+                </Text>
+
+                <Text style={[styles.materialMeta, { color: theme.colors.textMuted }]}>
+                  {material.key_concepts?.length ?? 0} concepts ·{' '}
+                  {material.quiz?.questions?.length ?? 0} questions
+                </Text>
+              </View>
+
+              <Text style={[styles.arrow, { color: theme.colors.textMuted }]}>›</Text>
+            </Pressable>
+          ))
+        )}
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -644,13 +814,13 @@ const styles = StyleSheet.create({
   },
 
   uploadTitle: {
-    color: '#0B0B10',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
   },
 
   uploadDescription: {
-    color: '#666671',
+    color: '#92929D',
     fontSize: 12,
     lineHeight: 17,
     marginTop: 4,
@@ -719,6 +889,17 @@ const styles = StyleSheet.create({
     color: '#777783',
     fontSize: 25,
     marginLeft: 10,
+  },
+
+  loadingLibrary: {
+    alignItems: 'center',
+    paddingVertical: 25,
+  },
+
+  loadingLibraryText: {
+    color: '#858590',
+    fontSize: 12,
+    marginTop: 10,
   },
 
   emptyHint: {
@@ -982,6 +1163,6 @@ const styles = StyleSheet.create({
     color: '#B8B8C2',
     fontSize: 13,
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 8,
   },
 });
