@@ -25,24 +25,44 @@ export default function RootLayout() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data } = await supabase.auth.getSession();
+    let mounted = true;
 
-      setSession(data.session);
-      setLoading(false);
+    const initializeAuth = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error('GET SESSION ERROR:', error);
+      }
+
+      if (mounted) {
+        setSession(session);
+        setLoading(false);
+      }
     };
 
-    getSession();
+    initializeAuth();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
-        setSession(newSession);
+      (event, newSession) => {
+        console.log('AUTH EVENT:', event);
+        console.log(
+          'NEW SESSION:',
+          newSession?.user?.id ?? 'NO SESSION'
+        );
+
+        if (mounted) {
+          setSession(newSession);
+        }
       }
     );
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -87,7 +107,6 @@ export default function RootLayout() {
             <Stack.Screen name="auth" />
           </Stack>
         )}
-        
       </ThemeProvider>
     </AppThemeProvider>
   );

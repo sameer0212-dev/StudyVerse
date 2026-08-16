@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const API_URL = 'http://192.168.100.68:8000';
+const API_URL = 'http://192.168.100.66:8000';
 
 type QuizQuestion = {
   question: string;
@@ -73,24 +73,27 @@ export default function LibraryScreen() {
     try {
       setLoadingMaterials(true);
 
+      // Get the current session first
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (userError) {
-        throw userError;
+      if (sessionError) {
+        throw sessionError;
       }
 
-      if (!user) {
+      // No authenticated session
+      if (!session?.user) {
         setMaterials([]);
         return;
       }
+      console.log('AUTH USER ID:', session.user.id);
 
       const { data, error } = await supabase
         .from('study_materials')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -193,18 +196,22 @@ export default function LibraryScreen() {
       setStudyResult(data);
 
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      if (userError || !user) {
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (!session?.user) {
         throw new Error('You must be signed in to save study material.');
       }
 
       const { error: saveError } = await supabase
         .from('study_materials')
         .insert({
-          user_id: user.id,
+          user_id: session.user.id,
           title: data.filename,
           file_name: data.filename,
           summary: data.notes.summary,

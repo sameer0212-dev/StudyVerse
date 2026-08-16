@@ -54,13 +54,22 @@ export default function HomeScreen() {
     setModalVisible(false);
   };
 
-  const handleLogout = async () => {
+const handleLogout = async () => {
+  try {
     const { error } = await supabase.auth.signOut();
+
     if (error) {
-      console.error('Logout error:', error);
+      console.error('LOGOUT ERROR:', error);
       return;
     }
-  };
+
+    console.log('LOGOUT SUCCESS');
+
+    router.replace('/auth');
+  } catch (error) {
+    console.error('LOGOUT EXCEPTION:', error);
+  }
+};
 
   const themeTagline =
     'tagline' in theme && typeof theme.tagline === 'string'
