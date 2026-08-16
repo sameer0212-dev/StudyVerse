@@ -17,6 +17,7 @@ type QuizQuestion = {
 };
 
 type Material = {
+    id?: string;
     title?: string;
     filename?: string;
     notes?: {
@@ -139,6 +140,9 @@ export default function MaterialScreen() {
                                 pathname: '/quiz',
                                 params: {
                                     questions: JSON.stringify(questions),
+                                    ...(material.id
+                                        ? { materialId: material.id, materialTitle: title }
+                                        : {}),
                                 },
                             });
                         }}

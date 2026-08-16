@@ -714,6 +714,7 @@ export default function LibraryScreen() {
               ]}
               onPress={() => {
                 const formattedMaterial = {
+                  id: material.id,
                   title: material.title,
                   filename: material.file_name || material.title,
                   summary: material.summary,

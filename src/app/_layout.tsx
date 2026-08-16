@@ -101,6 +101,8 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="material" />
             <Stack.Screen name="quiz" />
+            <Stack.Screen name="missions" />
+            <Stack.Screen name="progress" />
           </Stack>
         ) : (
           <Stack screenOptions={{ headerShown: false }}>

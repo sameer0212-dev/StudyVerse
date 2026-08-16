@@ -1,9 +1,20 @@
+import { HalftoneBackground, WebCornerOverlay } from '@/components/spider-fx';
 import { AppTheme, AppThemes } from '@/constants/theme';
 import { useTheme } from '@/context/ThemeContext';
-import { supabase } from '@/lib/supabase';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
 import {
+  computeAverageMastery,
+  computeDayStreak,
+  fetchUserStudyData,
+  getMissionRoute,
+  MissionData,
+  pickTodaysMission,
+  QuizAttempt,
+} from '@/lib/progress';
+import { supabase } from '@/lib/supabase';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -12,42 +23,58 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Path, Pattern, Rect } from 'react-native-svg';
-
-// Halftone Dot Pattern Background Accent
-const HalftoneBackground = ({ opacity = 0.15 }: { opacity?: number }) => (
-  <View style={[StyleSheet.absoluteFill, { opacity, overflow: 'hidden' }]}>
-    <Svg width="100%" height="100%">
-      <Pattern id="halftone" width="12" height="12" patternUnits="userSpaceOnUse">
-        <Circle cx="6" cy="6" r="2.5" fill="#FFFFFF" />
-      </Pattern>
-      <Rect width="100%" height="100%" fill="url(#halftone)" />
-    </Svg>
-  </View>
-);
-
-// Vector Spider Web Watermark Overlay for Card Corners
-const WebCornerOverlay = ({ color = '#E63946', opacity = 0.25 }: { color?: string; opacity?: number }) => (
-  <View style={[styles.webOverlay, { opacity }]}>
-    <Svg width="110" height="110" viewBox="0 0 100 100">
-      <Path d="M 0,0 L 100,0 L 0,100 Z" fill="none" />
-      <Line x1="0" y1="0" x2="100" y2="100" stroke={color} strokeWidth="1.5" />
-      <Line x1="0" y1="0" x2="100" y2="50" stroke={color} strokeWidth="1" />
-      <Line x1="0" y1="0" x2="50" y2="100" stroke={color} strokeWidth="1" />
-      <Line x1="0" y1="0" x2="100" y2="25" stroke={color} strokeWidth="0.8" />
-      <Line x1="0" y1="0" x2="25" y2="100" stroke={color} strokeWidth="0.8" />
-      <Path d="M 20,0 Q 20,20 0,20" stroke={color} strokeWidth="1.2" fill="none" />
-      <Path d="M 45,0 Q 45,45 0,45" stroke={color} strokeWidth="1.2" fill="none" />
-      <Path d="M 70,0 Q 70,70 0,70" stroke={color} strokeWidth="1.2" fill="none" />
-      <Path d="M 95,0 Q 95,95 0,95" stroke={color} strokeWidth="1.2" fill="none" />
-    </Svg>
-  </View>
-);
 
 export default function HomeScreen() {
   const router = useRouter();
   const { theme, themeId, setTheme } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
+
+  const [loadingMission, setLoadingMission] = useState(true);
+  const [todaysMission, setTodaysMission] = useState<MissionData | null>(null);
+  const [dayStreak, setDayStreak] = useState(0);
+  const [avgMastery, setAvgMastery] = useState<number | null>(null);
+  const [missionsCompleted, setMissionsCompleted] = useState(0);
+
+  const loadHomeData = useCallback(async () => {
+    try {
+      setLoadingMission(true);
+      const data = await fetchUserStudyData();
+
+      if (!data) {
+        setTodaysMission(null);
+        setDayStreak(0);
+        setAvgMastery(null);
+        setMissionsCompleted(0);
+        return;
+      }
+
+      setTodaysMission(pickTodaysMission(data.missions));
+      setDayStreak(computeDayStreak(data.attempts));
+      setAvgMastery(computeAverageMastery(data.missions));
+      setMissionsCompleted(
+        new Set(data.attempts.map((a: QuizAttempt) => a.material_id)).size
+      );
+    } catch (error) {
+      console.error('Failed to load home data:', error);
+    } finally {
+      setLoadingMission(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHomeData();
+    }, [loadHomeData])
+  );
+
+  const handleContinueMission = () => {
+    if (!todaysMission) {
+      router.push('/library');
+      return;
+    }
+    const route = getMissionRoute(todaysMission);
+    router.push(route as any);
+  };
 
   const handleSelectTheme = (id: string) => {
     setTheme(id as any);
@@ -143,67 +170,115 @@ const handleLogout = async () => {
         {/* Section Header: Today's Mission */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>🕸️ TODAY'S MISSION</Text>
-          <Text style={styles.sectionAction}>View all</Text>
+          <Pressable onPress={() => router.push('/missions')}>
+            <Text style={styles.sectionAction}>View all</Text>
+          </Pressable>
         </View>
 
         {/* Mission Card */}
-        <View
-          style={[
-            styles.missionCard,
-            { backgroundColor: theme.colors.card },
-          ]}
-        >
-          <WebCornerOverlay color="#00D2FF" opacity={0.2} />
-
-          <View style={styles.missionTop}>
-            <View
+        {loadingMission ? (
+          <View
+            style={[
+              styles.missionCard,
+              styles.missionLoading,
+              { backgroundColor: theme.colors.card },
+            ]}
+          >
+            <ActivityIndicator color={theme.colors.primary} />
+          </View>
+        ) : !todaysMission ? (
+          <View
+            style={[
+              styles.missionCard,
+              { backgroundColor: theme.colors.card },
+            ]}
+          >
+            <HalftoneBackground opacity={0.08} />
+            <Text style={styles.missionSubject}>No missions yet</Text>
+            <Text style={styles.missionTopic}>
+              Upload a PDF to your Library to generate your first mission.
+            </Text>
+            <Pressable
               style={[
-                styles.missionIcon,
-                { backgroundColor: theme.colors.cardElevated },
+                styles.continueButton,
+                { backgroundColor: theme.colors.primary },
               ]}
+              onPress={() => router.push('/library')}
             >
-              <Text style={styles.missionIconText}>🎯</Text>
+              <Text style={styles.continueButtonText}>GO TO LIBRARY</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.missionCard,
+              { backgroundColor: theme.colors.card },
+            ]}
+          >
+            <WebCornerOverlay color="#00D2FF" opacity={0.2} />
+
+            <View style={styles.missionTop}>
+              <View
+                style={[
+                  styles.missionIcon,
+                  { backgroundColor: theme.colors.cardElevated },
+                ]}
+              >
+                <Text style={styles.missionIconText}>🎯</Text>
+              </View>
+
+              <View style={styles.missionInfo}>
+                <Text style={styles.missionSubject} numberOfLines={1}>
+                  {todaysMission.title}
+                </Text>
+                <Text style={styles.missionTopic} numberOfLines={1}>
+                  {todaysMission.topic}
+                </Text>
+              </View>
+
+              {/* Dynamic Pill Badge */}
+              <View style={styles.comicBadge}>
+                <Text style={styles.comicBadgeText}>
+                  {todaysMission.completed
+                    ? `${todaysMission.bestScore}% MASTERY`
+                    : 'NOT STARTED'}
+                </Text>
+              </View>
             </View>
 
-            <View style={styles.missionInfo}>
-              <Text style={styles.missionSubject}>Operating Systems</Text>
-              <Text style={styles.missionTopic}>
-                Process Management
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressLabel}>Mastery Level</Text>
+              <Text style={styles.progressPercentage}>
+                {todaysMission.bestScore ?? 0}%
               </Text>
             </View>
 
-            {/* Dynamic Pill Badge */}
-            <View style={styles.comicBadge}>
-              <Text style={styles.comicBadgeText}>80% MASTERY</Text>
+            <View style={styles.progressBackground}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${todaysMission.bestScore ?? 0}%`,
+                    backgroundColor: theme.colors.primary,
+                  },
+                ]}
+              />
             </View>
-          </View>
 
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>Mastery Level</Text>
-            <Text style={styles.progressPercentage}>80%</Text>
-          </View>
-
-          <View style={styles.progressBackground}>
-            <View
+            {/* Action Button with Cut Corners */}
+            <Pressable
               style={[
-                styles.progressFill,
+                styles.continueButton,
                 { backgroundColor: theme.colors.primary },
               ]}
-            />
+              onPress={handleContinueMission}
+            >
+              <Text style={styles.continueButtonText}>
+                {todaysMission.completed ? 'RETAKE QUIZ' : 'CONTINUE MISSION'}
+              </Text>
+            </Pressable>
           </View>
-
-          {/* Action Button with Cut Corners */}
-          <Pressable
-            style={[
-              styles.continueButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-          >
-            <Text style={styles.continueButtonText}>
-              CONTINUE MISSION
-            </Text>
-          </Pressable>
-        </View>
+        )}
 
         {/* Quick Stats Header */}
         <Text style={styles.sectionTitle}>🕷️ YOUR PROGRESS</Text>
@@ -216,7 +291,7 @@ const handleLogout = async () => {
             ]}
           >
             <Text style={styles.statIcon}>🔥</Text>
-            <Text style={styles.statValue}>6</Text>
+            <Text style={styles.statValue}>{dayStreak}</Text>
             <Text style={styles.statLabel}>Day Streak</Text>
           </View>
 
@@ -227,7 +302,9 @@ const handleLogout = async () => {
             ]}
           >
             <Text style={styles.statIcon}>🧠</Text>
-            <Text style={styles.statValue}>72%</Text>
+            <Text style={styles.statValue}>
+              {avgMastery !== null ? `${avgMastery}%` : '—'}
+            </Text>
             <Text style={styles.statLabel}>Avg. Mastery</Text>
           </View>
 
@@ -238,7 +315,7 @@ const handleLogout = async () => {
             ]}
           >
             <Text style={styles.statIcon}>🎯</Text>
-            <Text style={styles.statValue}>24</Text>
+            <Text style={styles.statValue}>{missionsCompleted}</Text>
             <Text style={styles.statLabel}>Missions</Text>
           </View>
         </View>
@@ -270,6 +347,7 @@ const handleLogout = async () => {
               styles.asymmetricCardRight,
               { backgroundColor: theme.colors.card },
             ]}
+            onPress={() => router.push('/missions')}
           >
             <HalftoneBackground opacity={0.1} />
             <Text style={styles.exploreIcon}>🎯</Text>
@@ -285,6 +363,7 @@ const handleLogout = async () => {
               styles.asymmetricCardRight,
               { backgroundColor: theme.colors.card },
             ]}
+            onPress={() => router.push('/progress')}
           >
             <HalftoneBackground opacity={0.1} />
             <Text style={styles.exploreIcon}>📊</Text>
@@ -508,6 +587,11 @@ const styles = StyleSheet.create({
     borderColor: '#292933',
     overflow: 'hidden',
     position: 'relative',
+  },
+  missionLoading: {
+    minHeight: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   missionTop: {
     flexDirection: 'row',

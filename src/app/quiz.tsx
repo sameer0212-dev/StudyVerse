@@ -1,12 +1,13 @@
+import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 type QuizQuestion = {
@@ -19,7 +20,11 @@ type QuizQuestion = {
 export default function QuizScreen() {
   const router = useRouter();
 
-  const params = useLocalSearchParams<{ questions?: string }>();
+  const params = useLocalSearchParams<{
+    questions?: string;
+    materialId?: string;
+    materialTitle?: string;
+  }>();
 
   const questions: QuizQuestion[] = useMemo(() => {
     if (!params.questions) return [];
@@ -36,6 +41,49 @@ export default function QuizScreen() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
+  const [attemptSaved, setAttemptSaved] = useState(false);
+
+  // If this quiz was launched with a materialId (e.g. from Missions or a
+  // material's detail screen), record the completed attempt so real
+  // mastery/progress/streak data can be derived. This is additive and
+  // silently no-ops if materialId isn't provided or saving fails, so it
+  // never blocks the existing quiz flow.
+  useEffect(() => {
+    if (!finished || attemptSaved || !params.materialId) return;
+
+    const saveAttempt = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.user) return;
+
+        const percentage =
+          questions.length > 0
+            ? Math.round((score / questions.length) * 100)
+            : 0;
+
+        const { error } = await supabase.from('quiz_attempts').insert({
+          user_id: session.user.id,
+          material_id: params.materialId,
+          score,
+          total_questions: questions.length,
+          percentage,
+        });
+
+        if (error) {
+          console.warn('Could not save quiz attempt:', error.message);
+        }
+      } catch (error) {
+        console.warn('Quiz attempt save failed:', error);
+      } finally {
+        setAttemptSaved(true);
+      }
+    };
+
+    saveAttempt();
+  }, [finished, attemptSaved, params.materialId, score, questions.length]);
 
   if (questions.length === 0) {
     return (
