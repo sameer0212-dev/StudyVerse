@@ -103,6 +103,7 @@ export default function RootLayout() {
             <Stack.Screen name="quiz" />
             <Stack.Screen name="missions" />
             <Stack.Screen name="progress" />
+            <Stack.Screen name="motivation" />
           </Stack>
         ) : (
           <Stack screenOptions={{ headerShown: false }}>
