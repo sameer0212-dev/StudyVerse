@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const API_URL = 'http://192.168.100.66:8000';
+const API_URL = 'http://192.168.1.12:8000';
 
 type QuizQuestion = {
   question: string;

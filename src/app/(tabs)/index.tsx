@@ -388,6 +388,22 @@ const handleLogout = async () => {
               Customize your world
             </Text>
           </Pressable>
+
+          <Pressable
+            style={[
+              styles.exploreCard,
+              styles.asymmetricCardRight,
+              { backgroundColor: theme.colors.card },
+            ]}
+            onPress={() => router.push('/motivation')}
+          >
+            <HalftoneBackground opacity={0.1} />
+            <Text style={styles.exploreIcon}>🕊️</Text>
+            <Text style={styles.exploreTitle}>TALK</Text>
+            <Text style={styles.exploreDescription}>
+              Need to vent? I'm here
+            </Text>
+          </Pressable>
         </View>
 
         <Pressable
