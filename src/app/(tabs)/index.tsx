@@ -12,9 +12,10 @@ import {
 } from '@/lib/progress';
 import { supabase } from '@/lib/supabase';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Modal,
   Pressable,
   ScrollView,
@@ -23,6 +24,23 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+function getTimeBasedGreeting(): { text: string; emoji: string } {
+  const hour = new Date().getHours();
+  if (hour < 5) return { text: 'Still up', emoji: '🌙' };
+  if (hour < 12) return { text: 'Good morning', emoji: '☀️' };
+  if (hour < 18) return { text: 'Good afternoon', emoji: '🌤️' };
+  return { text: 'Good evening', emoji: '🌙' };
+}
+
+/** Colors a mastery/status badge by performance tier, using only existing
+ * theme tokens (no new hardcoded colors). */
+function getMasteryTierColor(theme: AppTheme, score: number | null) {
+  if (score === null) return theme.colors.textMuted;
+  if (score >= 80) return theme.colors.success;
+  if (score >= 50) return theme.colors.warning;
+  return theme.colors.danger;
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -34,6 +52,25 @@ export default function HomeScreen() {
   const [dayStreak, setDayStreak] = useState(0);
   const [avgMastery, setAvgMastery] = useState<number | null>(null);
   const [missionsCompleted, setMissionsCompleted] = useState(0);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: loadingMission ? 0 : (todaysMission?.bestScore ?? 0),
+      duration: 600,
+      useNativeDriver: false,
+    }).start();
+  }, [loadingMission, todaysMission, progressAnim]);
 
   const loadHomeData = useCallback(async () => {
     try {
@@ -98,10 +135,9 @@ const handleLogout = async () => {
   }
 };
 
-  const themeTagline =
-    'tagline' in theme && typeof theme.tagline === 'string'
-      ? theme.tagline
-      : 'Train like a hero. Master your concepts.';
+  const themeTagline = theme.tagline ?? 'Train like a hero. Master your concepts.';
+
+  const greeting = getTimeBasedGreeting();
 
   return (
     <SafeAreaView
@@ -114,64 +150,112 @@ const handleLogout = async () => {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>Good evening 👋</Text>
-            <Text style={styles.subtitle}>
-              Ready for today's mission?
-            </Text>
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerText}>
+              <Text style={[styles.greeting, { color: theme.colors.text }]}>
+                {greeting.text} {greeting.emoji}
+              </Text>
+              <Text
+                style={[styles.subtitle, { color: theme.colors.textSecondary }]}
+              >
+                Ready for today's mission?
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.avatarRing,
+                { borderColor: theme.colors.primarySoft },
+              ]}
+            >
+              <View
+                style={[
+                  styles.avatar,
+                  {
+                    backgroundColor: theme.colors.primary,
+                  },
+                ]}
+              >
+                <Text style={styles.avatarText}>S</Text>
+              </View>
+            </View>
           </View>
 
+          {/* Current Theme Card */}
           <View
             style={[
-              styles.avatar,
+              styles.themeCard,
               {
-                backgroundColor: theme.colors.primary,
-                borderColor: theme.colors.primary,
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
               },
             ]}
           >
-            <Text style={styles.avatarText}>S</Text>
+            <HalftoneBackground opacity={0.07} />
+            <WebCornerOverlay
+              color={theme.colors.primary}
+              opacity={0.18}
+              size={150}
+              corner="bottom-right"
+            />
+
+            <View style={styles.cardContent}>
+              <Text style={[styles.themeLabel, { color: theme.colors.textMuted }]}>
+                CURRENT THEME
+              </Text>
+              <View style={styles.themeTitleRow}>
+                <View
+                  style={[
+                    styles.themeEmojiChip,
+                    { backgroundColor: theme.colors.cardElevated },
+                  ]}
+                >
+                  <Text style={styles.themeEmoji}>{theme.emoji}</Text>
+                </View>
+                <Text style={[styles.themeTitle, { color: theme.colors.text }]}>
+                  {theme.name}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.themeDescription,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                {themeTagline}
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={() => setModalVisible(true)}
+              style={({ pressed }) => [
+                styles.themeButton,
+                {
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.cardElevated,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.themeButtonText, { color: theme.colors.text }]}>
+                Themes
+              </Text>
+            </Pressable>
           </View>
-        </View>
-
-        {/* Current Theme Card */}
-        <View
-          style={[
-            styles.themeCard,
-            { backgroundColor: theme.colors.card },
-          ]}
-        >
-          <HalftoneBackground opacity={0.08} />
-          <WebCornerOverlay color={theme.colors.primary} opacity={0.3} />
-
-          <View style={styles.cardContent}>
-            <Text style={styles.themeLabel}>CURRENT THEME</Text>
-            <Text style={styles.themeTitle}>
-              {theme.emoji} {theme.name}
-            </Text>
-            <Text style={styles.themeDescription}>
-              {themeTagline}
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={() => setModalVisible(true)}
-            style={[
-              styles.themeButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-          >
-            <Text style={styles.themeButtonText}>Themes</Text>
-          </Pressable>
-        </View>
 
         {/* Section Header: Today's Mission */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>🕸️ TODAY'S MISSION</Text>
-          <Pressable onPress={() => router.push('/missions')}>
-            <Text style={styles.sectionAction}>View all</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+            🕸️ TODAY'S MISSION
+          </Text>
+          <Pressable onPress={() => router.push('/missions')} hitSlop={8}>
+            <Text
+              style={[styles.sectionAction, { color: theme.colors.textSecondary }]}
+            >
+              View all ›
+            </Text>
           </Pressable>
         </View>
 
@@ -181,7 +265,7 @@ const handleLogout = async () => {
             style={[
               styles.missionCard,
               styles.missionLoading,
-              { backgroundColor: theme.colors.card },
+              { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
             ]}
           >
             <ActivityIndicator color={theme.colors.primary} />
@@ -190,18 +274,25 @@ const handleLogout = async () => {
           <View
             style={[
               styles.missionCard,
-              { backgroundColor: theme.colors.card },
+              { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
             ]}
           >
-            <HalftoneBackground opacity={0.08} />
-            <Text style={styles.missionSubject}>No missions yet</Text>
-            <Text style={styles.missionTopic}>
+            <View
+              style={[styles.missionAccentStrip, { backgroundColor: theme.colors.primary }]}
+            />
+            <HalftoneBackground opacity={0.07} />
+            <Text style={[styles.missionSubject, { color: theme.colors.text }]}>
+              No missions yet
+            </Text>
+            <Text
+              style={[styles.missionTopic, { color: theme.colors.textSecondary }]}
+            >
               Upload a PDF to your Library to generate your first mission.
             </Text>
             <Pressable
-              style={[
+              style={({ pressed }) => [
                 styles.continueButton,
-                { backgroundColor: theme.colors.primary },
+                { backgroundColor: theme.colors.primary, opacity: pressed ? 0.85 : 1 },
               ]}
               onPress={() => router.push('/library')}
             >
@@ -212,33 +303,63 @@ const handleLogout = async () => {
           <View
             style={[
               styles.missionCard,
-              { backgroundColor: theme.colors.card },
+              { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
             ]}
           >
-            <WebCornerOverlay color="#00D2FF" opacity={0.2} />
+            <View
+              style={[styles.missionAccentStrip, { backgroundColor: theme.colors.primary }]}
+            />
+            <WebCornerOverlay
+              color={theme.colors.primary}
+              opacity={0.14}
+              size={150}
+              corner="bottom-right"
+            />
 
             <View style={styles.missionTop}>
               <View
                 style={[
                   styles.missionIcon,
-                  { backgroundColor: theme.colors.cardElevated },
+                  {
+                    backgroundColor: theme.colors.cardElevated,
+                    borderColor: theme.colors.primarySoft,
+                  },
                 ]}
               >
                 <Text style={styles.missionIconText}>🎯</Text>
               </View>
 
               <View style={styles.missionInfo}>
-                <Text style={styles.missionSubject} numberOfLines={1}>
+                <Text
+                  style={[styles.missionSubject, { color: theme.colors.text }]}
+                  numberOfLines={1}
+                >
                   {todaysMission.title}
                 </Text>
-                <Text style={styles.missionTopic} numberOfLines={1}>
+                <Text
+                  style={[styles.missionTopic, { color: theme.colors.textSecondary }]}
+                  numberOfLines={1}
+                >
                   {todaysMission.topic}
                 </Text>
               </View>
 
-              {/* Dynamic Pill Badge */}
-              <View style={styles.comicBadge}>
-                <Text style={styles.comicBadgeText}>
+              {/* Dynamic Pill Badge, color-tiered by actual mastery */}
+              <View
+                style={[
+                  styles.comicBadge,
+                  {
+                    borderColor: getMasteryTierColor(theme, todaysMission.bestScore),
+                    backgroundColor: theme.colors.cardElevated,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.comicBadgeText,
+                    { color: getMasteryTierColor(theme, todaysMission.bestScore) },
+                  ]}
+                >
                   {todaysMission.completed
                     ? `${todaysMission.bestScore}% MASTERY`
                     : 'NOT STARTED'}
@@ -247,19 +368,28 @@ const handleLogout = async () => {
             </View>
 
             <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>Mastery Level</Text>
-              <Text style={styles.progressPercentage}>
+              <Text
+                style={[styles.progressLabel, { color: theme.colors.textMuted }]}
+              >
+                Mastery Level
+              </Text>
+              <Text style={[styles.progressPercentage, { color: theme.colors.text }]}>
                 {todaysMission.bestScore ?? 0}%
               </Text>
             </View>
 
-            <View style={styles.progressBackground}>
-              <View
+            <View
+              style={[styles.progressBackground, { backgroundColor: theme.colors.border }]}
+            >
+              <Animated.View
                 style={[
                   styles.progressFill,
                   {
-                    width: `${todaysMission.bestScore ?? 0}%`,
                     backgroundColor: theme.colors.primary,
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 100],
+                      outputRange: ['0%', '100%'],
+                    }),
                   },
                 ]}
               />
@@ -267,153 +397,233 @@ const handleLogout = async () => {
 
             {/* Action Button with Cut Corners */}
             <Pressable
-              style={[
+              style={({ pressed }) => [
                 styles.continueButton,
-                { backgroundColor: theme.colors.primary },
+                { backgroundColor: theme.colors.primary, opacity: pressed ? 0.85 : 1 },
               ]}
               onPress={handleContinueMission}
             >
               <Text style={styles.continueButtonText}>
-                {todaysMission.completed ? 'RETAKE QUIZ' : 'CONTINUE MISSION'}
+                {todaysMission.completed ? 'RETAKE QUIZ →' : 'CONTINUE MISSION →'}
               </Text>
             </Pressable>
           </View>
         )}
 
         {/* Quick Stats Header */}
-        <Text style={styles.sectionTitle}>🕷️ YOUR PROGRESS</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          🕷️ YOUR PROGRESS
+        </Text>
 
-        <View style={styles.statsRow}>
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.card },
-            ]}
-          >
+        <View
+          style={[
+            styles.statsCard,
+            { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+          ]}
+        >
+          <View style={styles.statColumn}>
             <Text style={styles.statIcon}>🔥</Text>
-            <Text style={styles.statValue}>{dayStreak}</Text>
-            <Text style={styles.statLabel}>Day Streak</Text>
+            <Text style={[styles.statValue, { color: theme.colors.text }]}>
+              {dayStreak}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+              Day Streak
+            </Text>
           </View>
 
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.card },
-            ]}
-          >
+          <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
+
+          <View style={styles.statColumn}>
             <Text style={styles.statIcon}>🧠</Text>
-            <Text style={styles.statValue}>
+            <Text style={[styles.statValue, { color: theme.colors.text }]}>
               {avgMastery !== null ? `${avgMastery}%` : '—'}
             </Text>
-            <Text style={styles.statLabel}>Avg. Mastery</Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+              Avg. Mastery
+            </Text>
           </View>
 
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.card },
-            ]}
-          >
+          <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
+
+          <View style={styles.statColumn}>
             <Text style={styles.statIcon}>🎯</Text>
-            <Text style={styles.statValue}>{missionsCompleted}</Text>
-            <Text style={styles.statLabel}>Missions</Text>
+            <Text style={[styles.statValue, { color: theme.colors.text }]}>
+              {missionsCompleted}
+            </Text>
+            <Text style={[styles.statLabel, { color: theme.colors.textMuted }]}>
+              Missions
+            </Text>
           </View>
         </View>
 
         {/* Quick Actions Header */}
-        <Text style={styles.sectionTitle}>🕸️ EXPLORE</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+          🕸️ EXPLORE
+        </Text>
 
         {/* Asymmetric / Diagonal Cut Action Grid */}
         <View style={styles.exploreGrid}>
           <Pressable
-            style={[
+            style={({ pressed }) => [
               styles.exploreCard,
               styles.asymmetricCardLeft,
-              { backgroundColor: theme.colors.card },
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.85 : 1,
+              },
             ]}
             onPress={() => router.push('/library')}
           >
-            <HalftoneBackground opacity={0.1} />
-            <Text style={styles.exploreIcon}>📚</Text>
-            <Text style={styles.exploreTitle}>LIBRARY</Text>
-            <Text style={styles.exploreDescription}>
+            <HalftoneBackground opacity={0.08} />
+            <View
+              style={[styles.exploreIconChip, { backgroundColor: theme.colors.cardElevated }]}
+            >
+              <Text style={styles.exploreIcon}>📚</Text>
+            </View>
+            <Text style={[styles.exploreTitle, { color: theme.colors.text }]}>
+              LIBRARY
+            </Text>
+            <Text
+              style={[styles.exploreDescription, { color: theme.colors.textMuted }]}
+            >
               Your study materials
             </Text>
           </Pressable>
 
           <Pressable
-            style={[
+            style={({ pressed }) => [
               styles.exploreCard,
               styles.asymmetricCardRight,
-              { backgroundColor: theme.colors.card },
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.85 : 1,
+              },
             ]}
             onPress={() => router.push('/missions')}
           >
-            <HalftoneBackground opacity={0.1} />
-            <Text style={styles.exploreIcon}>🎯</Text>
-            <Text style={styles.exploreTitle}>MISSIONS</Text>
-            <Text style={styles.exploreDescription}>
+            <HalftoneBackground opacity={0.08} />
+            <View
+              style={[styles.exploreIconChip, { backgroundColor: theme.colors.cardElevated }]}
+            >
+              <Text style={styles.exploreIcon}>🎯</Text>
+            </View>
+            <Text style={[styles.exploreTitle, { color: theme.colors.text }]}>
+              MISSIONS
+            </Text>
+            <Text
+              style={[styles.exploreDescription, { color: theme.colors.textMuted }]}
+            >
               Practice and learn
             </Text>
           </Pressable>
 
           <Pressable
-            style={[
+            style={({ pressed }) => [
               styles.exploreCard,
               styles.asymmetricCardRight,
-              { backgroundColor: theme.colors.card },
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.85 : 1,
+              },
             ]}
             onPress={() => router.push('/progress')}
           >
-            <HalftoneBackground opacity={0.1} />
-            <Text style={styles.exploreIcon}>📊</Text>
-            <Text style={styles.exploreTitle}>PROGRESS</Text>
-            <Text style={styles.exploreDescription}>
+            <HalftoneBackground opacity={0.08} />
+            <View
+              style={[styles.exploreIconChip, { backgroundColor: theme.colors.cardElevated }]}
+            >
+              <Text style={styles.exploreIcon}>📊</Text>
+            </View>
+            <Text style={[styles.exploreTitle, { color: theme.colors.text }]}>
+              PROGRESS
+            </Text>
+            <Text
+              style={[styles.exploreDescription, { color: theme.colors.textMuted }]}
+            >
               Track your mastery
             </Text>
           </Pressable>
 
           <Pressable
-            style={[
+            style={({ pressed }) => [
               styles.exploreCard,
               styles.asymmetricCardLeft,
-              { backgroundColor: theme.colors.card },
+              {
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.85 : 1,
+              },
             ]}
             onPress={() => setModalVisible(true)}
           >
-            <HalftoneBackground opacity={0.1} />
-            <Text style={styles.exploreIcon}>🎨</Text>
-            <Text style={styles.exploreTitle}>THEMES</Text>
-            <Text style={styles.exploreDescription}>
+            <HalftoneBackground opacity={0.08} />
+            <View
+              style={[styles.exploreIconChip, { backgroundColor: theme.colors.cardElevated }]}
+            >
+              <Text style={styles.exploreIcon}>🎨</Text>
+            </View>
+            <Text style={[styles.exploreTitle, { color: theme.colors.text }]}>
+              THEMES
+            </Text>
+            <Text
+              style={[styles.exploreDescription, { color: theme.colors.textMuted }]}
+            >
               Customize your world
             </Text>
           </Pressable>
 
+          {/* TALK keeps a warmer, more personal identity via primarySoft */}
           <Pressable
-            style={[
+            style={({ pressed }) => [
               styles.exploreCard,
               styles.asymmetricCardRight,
-              { backgroundColor: theme.colors.card },
+              styles.talkCard,
+              {
+                backgroundColor: theme.colors.primarySoft,
+                borderColor: theme.colors.primaryDark,
+                opacity: pressed ? 0.85 : 1,
+              },
             ]}
             onPress={() => router.push('/motivation')}
           >
-            <HalftoneBackground opacity={0.1} />
-            <Text style={styles.exploreIcon}>🕊️</Text>
-            <Text style={styles.exploreTitle}>TALK</Text>
-            <Text style={styles.exploreDescription}>
+            <HalftoneBackground opacity={0.06} />
+            <View
+              style={[styles.exploreIconChip, { backgroundColor: theme.colors.cardElevated }]}
+            >
+              <Text style={styles.exploreIcon}>🕊️</Text>
+            </View>
+            <Text style={[styles.exploreTitle, { color: theme.colors.text }]}>
+              TALK
+            </Text>
+            <Text
+              style={[styles.exploreDescription, { color: theme.colors.textSecondary }]}
+            >
               Need to vent? I'm here
             </Text>
           </Pressable>
         </View>
 
         <Pressable
-          style={styles.logoutButton}
+          style={({ pressed }) => [
+            styles.logoutButton,
+            {
+              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.card,
+              opacity: pressed ? 0.85 : 1,
+            },
+          ]}
           onPress={handleLogout}
         >
-          <Text style={styles.logoutButtonText}>LOG OUT</Text>
+          <Text style={[styles.logoutButtonText, { color: theme.colors.danger }]}>
+            LOG OUT
+          </Text>
         </Pressable>
 
         <View style={{ height: 30 }} />
+        </Animated.View>
       </ScrollView>
 
       {/* Theme Selection Modal */}
@@ -430,10 +640,12 @@ const handleLogout = async () => {
           <View
             style={[
               styles.modalContent,
-              { backgroundColor: theme.colors.cardElevated },
+              { backgroundColor: theme.colors.cardElevated, borderColor: theme.colors.border },
             ]}
           >
-            <Text style={styles.modalTitle}>Choose a Theme</Text>
+            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+              Choose a Theme
+            </Text>
             {Object.keys(AppThemes).map((key) => {
               const item = (AppThemes as Record<string, AppTheme>)[key];
               const isSelected = themeId === key;
@@ -441,20 +653,26 @@ const handleLogout = async () => {
               return (
                 <Pressable
                   key={key}
-                  style={[
+                  style={({ pressed }) => [
                     styles.themeOption,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: theme.colors.border,
+                      opacity: pressed ? 0.85 : 1,
+                    },
                     isSelected && {
                       borderColor: theme.colors.primary,
                       borderWidth: 2,
+                      backgroundColor: theme.colors.primarySoft,
                     },
                   ]}
                   onPress={() => handleSelectTheme(key)}
                 >
-                  <Text style={styles.themeOptionText}>
+                  <Text style={[styles.themeOptionText, { color: theme.colors.text }]}>
                     {item.emoji} {item.name}
                   </Text>
                   {isSelected && (
-                    <Text style={{ color: theme.colors.primary }}>✓</Text>
+                    <Text style={{ color: theme.colors.primary, fontWeight: '800' }}>✓</Text>
                   )}
                 </Pressable>
               );
@@ -484,95 +702,103 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  headerText: {
+    flex: 1,
+    marginRight: 12,
+  },
   greeting: {
-    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: '700',
   },
   subtitle: {
-    color: '#92929D',
     fontSize: 14,
     marginTop: 5,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#24242D',
+  avatarRing: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#383842',
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
-  },
-  webOverlay: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    pointerEvents: 'none',
   },
   cardContent: {
     zIndex: 1,
   },
   themeCard: {
-    backgroundColor: '#15151D',
     borderRadius: 18,
     padding: 20,
     marginBottom: 28,
     borderWidth: 2,
-    borderColor: '#292933',
     overflow: 'hidden',
     position: 'relative',
   },
   themeLabel: {
-    color: '#777783',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.5,
   },
+  themeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 10,
+  },
+  themeEmojiChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeEmoji: {
+    fontSize: 17,
+  },
   themeTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '800',
-    marginTop: 7,
   },
   themeDescription: {
-    color: '#9999A5',
     fontSize: 13,
-    marginTop: 6,
+    marginTop: 8,
     maxWidth: 280,
+    lineHeight: 18,
   },
   themeButton: {
     alignSelf: 'flex-start',
     marginTop: 16,
     paddingHorizontal: 16,
     paddingVertical: 9,
-    borderRadius: 8,
-    backgroundColor: '#24242E',
+    borderRadius: 20,
+    borderWidth: 1.5,
     zIndex: 1,
   },
   themeButtonText: {
-    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
   logoutButton: {
-    borderWidth: 2,
-    borderColor: '#292933',
-    backgroundColor: '#15151D',
+    borderWidth: 1.5,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 10,
   },
   logoutButtonText: {
-    color: '#FF6B6B',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1,
   },
@@ -583,26 +809,30 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: {
-    color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     marginBottom: 12,
+    textTransform: 'uppercase',
   },
   sectionAction: {
-    color: '#9A9AA6',
     fontSize: 13,
     fontWeight: '600',
   },
   missionCard: {
-    backgroundColor: '#15151D',
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 20,
+    padding: 20,
     marginBottom: 28,
     borderWidth: 2,
-    borderColor: '#292933',
     overflow: 'hidden',
     position: 'relative',
+  },
+  missionAccentStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
   },
   missionLoading: {
     minHeight: 140,
@@ -612,12 +842,13 @@ const styles = StyleSheet.create({
   missionTop: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 4,
   },
   missionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#24242E',
+    width: 50,
+    height: 50,
+    borderRadius: 13,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -627,14 +858,13 @@ const styles = StyleSheet.create({
   missionInfo: {
     marginLeft: 13,
     flex: 1,
+    marginRight: 8,
   },
   missionSubject: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
   },
   missionTopic: {
-    color: '#92929D',
     fontSize: 13,
     marginTop: 4,
   },
@@ -643,84 +873,78 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#E63946',
-    backgroundColor: 'rgba(230, 57, 70, 0.15)',
   },
   comicBadgeText: {
-    color: '#FFD166',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 22,
+    marginTop: 24,
     marginBottom: 8,
   },
   progressLabel: {
-    color: '#8E8E9A',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   progressPercentage: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800',
   },
   progressBackground: {
     height: 8,
-    backgroundColor: '#292932',
     borderRadius: 10,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    width: '80%',
-    backgroundColor: '#FFFFFF',
     borderRadius: 10,
   },
   continueButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    borderTopRightRadius: 2,
-    borderBottomLeftRadius: 2,
-    paddingVertical: 13,
+    borderRadius: 12,
+    borderTopRightRadius: 3,
+    borderBottomLeftRadius: 3,
+    paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 18,
+    marginTop: 20,
   },
   continueButtonText: {
-    color: '#0B0B10',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 1,
   },
-  statsRow: {
+  statsCard: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 2,
+    paddingVertical: 16,
     marginBottom: 28,
   },
-  statCard: {
+  statColumn: {
     flex: 1,
-    backgroundColor: '#15151D',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 2,
-    borderColor: '#292933',
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    marginVertical: 4,
   },
   statIcon: {
-    fontSize: 19,
-    marginBottom: 8,
+    fontSize: 17,
+    marginBottom: 6,
   },
   statValue: {
-    color: '#FFFFFF',
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: '800',
   },
   statLabel: {
-    color: '#858590',
-    fontSize: 11,
+    fontSize: 10.5,
     marginTop: 3,
   },
   exploreGrid: {
@@ -731,14 +955,15 @@ const styles = StyleSheet.create({
   exploreCard: {
     width: '48%',
     flexGrow: 1,
-    backgroundColor: '#15151D',
     borderRadius: 16,
     padding: 16,
     borderWidth: 2,
-    borderColor: '#292933',
-    minHeight: 125,
+    minHeight: 128,
     overflow: 'hidden',
     position: 'relative',
+  },
+  talkCard: {
+    width: '100%',
   },
   asymmetricCardLeft: {
     borderTopLeftRadius: 4,
@@ -748,19 +973,24 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 4,
     borderBottomLeftRadius: 4,
   },
-  exploreIcon: {
-    fontSize: 24,
+  exploreIconChip: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
+  exploreIcon: {
+    fontSize: 18,
+  },
   exploreTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   exploreDescription: {
-    color: '#858590',
-    fontSize: 11,
+    fontSize: 11.5,
     marginTop: 4,
   },
   modalOverlay: {
@@ -771,11 +1001,12 @@ const styles = StyleSheet.create({
   modalContent: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    borderWidth: 1,
+    borderBottomWidth: 0,
     padding: 24,
     gap: 12,
   },
   modalTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
@@ -783,13 +1014,12 @@ const styles = StyleSheet.create({
   themeOption: {
     padding: 16,
     borderRadius: 12,
-    backgroundColor: '#15151D',
+    borderWidth: 1.5,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   themeOptionText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },

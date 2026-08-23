@@ -37,6 +37,7 @@ export const AppThemes = {
     id: 'webHero',
     name: 'Spider-Verse',
     emoji: '🕷️',
+    tagline: 'Train like a hero. Master your concepts.',
 
     colors: {
       background: '#080B12',       // Deep comic midnight suit background
@@ -76,6 +77,7 @@ export const AppThemes = {
     id: 'bts',
     name: 'BTS Army',
     emoji: '💜',
+    tagline: 'Stay in formation. Master every stage.',
 
     colors: {
       background: '#0F0914',       // Dark violet night
