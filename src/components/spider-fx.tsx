@@ -22,12 +22,27 @@ export const HalftoneBackground = ({
 export const WebCornerOverlay = ({
   color = '#E63946',
   opacity = 0.25,
+  size = 110,
+  corner = 'top-right',
 }: {
   color?: string;
   opacity?: number;
+  size?: number;
+  corner?: 'top-right' | 'bottom-right';
 }) => (
-  <View style={[styles.webOverlay, { opacity }]}>
-    <Svg width="110" height="110" viewBox="0 0 100 100">
+  <View
+    style={[
+      styles.webOverlay,
+      corner === 'bottom-right' ? styles.webOverlayBottom : styles.webOverlayTop,
+      { opacity, width: size, height: size },
+    ]}
+  >
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      style={corner === 'bottom-right' ? styles.flipped : undefined}
+    >
       <Path d="M 0,0 L 100,0 L 0,100 Z" fill="none" />
       <Line x1="0" y1="0" x2="100" y2="100" stroke={color} strokeWidth="1.5" />
       <Line x1="0" y1="0" x2="100" y2="50" stroke={color} strokeWidth="1" />
@@ -45,8 +60,17 @@ export const WebCornerOverlay = ({
 const styles = StyleSheet.create({
   webOverlay: {
     position: 'absolute',
+    pointerEvents: 'none',
+  },
+  webOverlayTop: {
     top: 0,
     right: 0,
-    pointerEvents: 'none',
+  },
+  webOverlayBottom: {
+    bottom: 0,
+    right: 0,
+  },
+  flipped: {
+    transform: [{ rotate: '90deg' }],
   },
 });
