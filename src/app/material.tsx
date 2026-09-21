@@ -150,6 +150,35 @@ export default function MaterialScreen() {
                         <Text style={styles.quizButtonText}>Start Quiz</Text>
                     </Pressable>
                 </View>
+
+                {/* Flashcards Section */}
+                <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>Flashcards</Text>
+                    <Text style={styles.quizIntro}>
+                        Generate a revision deck from this material's summary and
+                        key concepts.
+                    </Text>
+
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.quizButton,
+                            pressed && styles.buttonPressed,
+                        ]}
+                        onPress={() => {
+                            router.push({
+                                pathname: '/flashcards',
+                                params: {
+                                    materialId: material.id ?? '',
+                                    materialTitle: title,
+                                    summary: summary ?? '',
+                                    keyConcepts: JSON.stringify(keyConcepts),
+                                },
+                            });
+                        }}
+                    >
+                        <Text style={styles.quizButtonText}>Generate Flashcards</Text>
+                    </Pressable>
+                </View>
             </ScrollView>
         </SafeAreaView>
     );

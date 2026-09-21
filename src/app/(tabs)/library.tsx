@@ -1,6 +1,7 @@
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
 import * as DocumentPicker from 'expo-document-picker';
+import { File as ExpoFile } from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -15,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const API_URL = 'http://192.168.1.12:8000';
+const API_URL = 'http://192.168.1.17:8000';
 
 type QuizQuestion = {
   question: string;
@@ -160,7 +161,6 @@ export default function LibraryScreen() {
       const formData = new FormData();
 
       if (Platform.OS === 'web') {
-        // Expo Web gives us a browser Blob/File
         const response = await fetch(file.uri);
         const blob = await response.blob();
 
@@ -171,12 +171,8 @@ export default function LibraryScreen() {
           })
         );
       } else {
-        // iOS / Android
-        formData.append('file', {
-          uri: file.uri,
-          name: file.name,
-          type: file.mimeType || 'application/pdf',
-        } as any);
+        const nativeFile = new ExpoFile(file.uri);
+        formData.append('file', nativeFile);
       }
 
       const response = await fetch(`${API_URL}/upload-pdf`, {
@@ -207,6 +203,17 @@ export default function LibraryScreen() {
       if (!session?.user) {
         throw new Error('You must be signed in to save study material.');
       }
+
+      console.log('Testing Supabase connection...');
+      console.log('Supabase URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+
+      const { data: testData, error: testError } = await supabase
+        .from('study_materials')
+        .select('id')
+        .limit(1);
+
+      console.log('Supabase test result:', testData);
+      console.log('Supabase test error:', testError);
 
       const { error: saveError } = await supabase
         .from('study_materials')

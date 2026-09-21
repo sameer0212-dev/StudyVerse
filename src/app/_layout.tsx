@@ -1,10 +1,10 @@
 import { ThemeProvider as AppThemeProvider } from '@/context/ThemeContext';
+import { Stack } from 'expo-router';
 import {
   DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from "expo-router/react-navigation";
-import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import {
@@ -104,6 +104,7 @@ export default function RootLayout() {
             <Stack.Screen name="missions" />
             <Stack.Screen name="progress" />
             <Stack.Screen name="motivation" />
+            <Stack.Screen name="flashcards" />
           </Stack>
         ) : (
           <Stack screenOptions={{ headerShown: false }}>

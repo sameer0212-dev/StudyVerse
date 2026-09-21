@@ -52,6 +52,17 @@ class Quiz(BaseModel):
     )
 
 
+class Flashcard(BaseModel):
+    question: str = Field(description="A short, clear revision question")
+    answer: str = Field(description="A concise, accurate answer to the question")
+
+
+class FlashcardDeck(BaseModel):
+    flashcards: list[Flashcard] = Field(
+        description="Between 8 and 12 non-duplicate flashcards"
+    )
+
+
 # =========================
 # Structured Models
 # =========================
@@ -59,6 +70,8 @@ class Quiz(BaseModel):
 notes_model = model.with_structured_output(StudyNotes)
 
 quiz_model = model.with_structured_output(Quiz)
+
+flashcard_model = model.with_structured_output(FlashcardDeck)
 
 
 # =========================
@@ -108,6 +121,31 @@ Only use information supported by the study material.
 )
 
 
+flashcard_prompt = ChatPromptTemplate.from_template(
+    """
+You are an AI flashcard generator for a student revision app.
+
+Read the following study material and create a set of flashcards for
+spaced revision.
+
+Study material:
+{content}
+
+Create between 8 and 12 flashcards.
+
+Each flashcard should have:
+- A short, clear question testing one important concept
+- A concise but complete answer
+
+Rules:
+- Only use information supported by the study material. Do not invent facts.
+- Focus on the most important concepts, not trivial details.
+- Do not create duplicate or near-duplicate questions.
+- Keep answers concise enough for quick revision, but complete enough to be useful.
+"""
+)
+
+
 # =========================
 # Chains
 # =========================
@@ -115,6 +153,8 @@ Only use information supported by the study material.
 notes_chain = notes_prompt | notes_model
 
 quiz_chain = quiz_prompt | quiz_model
+
+flashcard_chain = flashcard_prompt | flashcard_model
 
 
 # =========================

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from pypdf import PdfReader
 import io
 
-from ai import study_chain, generate_motivation_reply
+from ai import study_chain, generate_motivation_reply, flashcard_chain
 
 
 app = FastAPI()
@@ -90,3 +90,38 @@ async def motivation_chat(payload: MotivationChatRequest):
         )
 
     return {"reply": reply}
+
+
+# =========================
+# Flashcards
+# =========================
+
+class FlashcardGenerationRequest(BaseModel):
+    summary: str = Field(min_length=1, max_length=20000)
+    key_concepts: list[str] = Field(default_factory=list)
+
+
+@app.post("/generate-flashcards")
+async def generate_flashcards(payload: FlashcardGenerationRequest):
+    content = payload.summary.strip()
+
+    if payload.key_concepts:
+        content += "\n\nKey concepts:\n" + "\n".join(
+            f"- {concept}" for concept in payload.key_concepts
+        )
+
+    if not content:
+        raise HTTPException(
+            status_code=400, detail="Study material is empty."
+        )
+
+    try:
+        result = flashcard_chain.invoke({"content": content})
+    except Exception as error:
+        print("Flashcard generation error:", error)
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't generate flashcards right now.",
+        )
+
+    return {"flashcards": [card.model_dump() for card in result.flashcards]}
